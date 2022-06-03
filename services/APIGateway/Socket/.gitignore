@@ -1,0 +1,7 @@
+node_modules
+.env.json
+.env.prod.json
+.env
+.idea/
+dist
+modules

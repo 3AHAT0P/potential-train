@@ -1,0 +1,89 @@
+version: '3'
+
+services:
+  socketgateway:
+    container_name: strpg-socket-gateway
+    build:
+      context: ./services/APIGateway/Socket
+      dockerfile: Dockerfile
+    image: strpg-socket-gateway
+    working_dir: /usr/src/app
+    volumes:
+      - ./services/APIGateway/Socket:/usr/src/app
+      - ./modules:/usr/src/app/modules
+      - node_modules_socket_gateway:/usr/src/app/node_modules
+    command: npm run start
+    restart: on-failure
+    environment:
+      NODE_ENV: development
+    ports:
+      - 8888:8888
+    secrets:
+      - main_secret
+    networks:
+      - webnet
+    dns:
+      - 8.8.8.8
+    depends_on:
+      - messagebroker
+  main:
+    container_name: strpg-mainly
+    build:
+      context: ./services/Main
+      dockerfile: Dockerfile
+    image: strpg-mainly
+    working_dir: /usr/src/app
+    volumes:
+      - ./services/Main:/usr/src/app
+      - ./modules:/usr/src/app/modules
+      - node_modules_main:/usr/src/app/node_modules
+    command: npm run start
+    restart: on-failure
+    environment:
+      NODE_ENV: development
+    secrets:
+      - main_secret
+    networks:
+      - webnet
+    dns:
+      - 8.8.8.8
+    depends_on:
+      - messagebroker
+  messagebroker:
+    container_name: strpg-message-broker
+    image: rabbitmq:3.10.5-management-alpine
+    ports:
+        - 5672:5672
+        - 15672:15672
+    volumes:
+        - rabbitmq_data:/var/lib/rabbitmq/
+        - rabbitmq_log:/var/log/rabbitmq
+    networks:
+      - webnet
+
+  # postgres:
+  #   container_name: postgres
+  #   image: postgres:14
+  #   networks:
+  #     - webnet
+  #   environment:
+  #     POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+  #     POSTGRES_USER: ${DATABASE_USER}
+  #     POSTGRES_DB: ${DATABASE_NAME}
+  #     PG_DATA: /var/lib/postgresql/data
+  #   ports:
+  #     - 5432:5432
+  #   volumes:
+  #     - pgdata:/var/lib/postgresql/data
+networks:
+  webnet:
+volumes:
+  graphDBData:
+  node_modules_main:
+  node_modules_socket_gateway:
+  pgdata:
+  rabbitmq_data:
+  rabbitmq_log:
+secrets:
+  main_secret:
+    file: .env.json
