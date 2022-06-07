@@ -1,4 +1,5 @@
-import { AMQPAdapter } from '../modules/AMQP';
+import { MessageContainer } from '@modules/APIGatewayShared';
+import { AMQPAdapter } from '@modules/AMQP';
 
 interface Config {
   messageBrokerPath: string;
@@ -8,8 +9,8 @@ const CONFIG: Config = {
   messageBrokerPath: 'amqp://messagebroker',
 };
 
-const onActionFromClientRecieve = (msg: any): void => {
-  console.log(" [x] Received '%s'", msg.content.toString());
+const onActionFromClientRecieve = (messageContainer: MessageContainer): void => {
+  console.log(" [x] Received '%s'", messageContainer);
 };
 
 const main = async (config: Config) => {

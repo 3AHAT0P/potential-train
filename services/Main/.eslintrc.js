@@ -31,6 +31,7 @@ module.exports = {
     '@typescript-eslint/no-unsafe-call': ['off'], // @WHY: becouse it's rule is broken
     '@typescript-eslint/no-unsafe-return': ['off'], // @WHY: becouse it's rule is broken
     'import/prefer-default-export': ['off'],
+    'import/no-extraneous-dependencies': ['off'],
     'no-underscore-dangle': ['off'],
     'no-restricted-syntax': ['off'],
     'no-void': ['warn'],

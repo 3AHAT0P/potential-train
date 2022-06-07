@@ -1,6 +1,9 @@
 import amqp, { Channel, Connection } from 'amqplib';
 
 import { sleep } from '../utils/sleep';
+import { logerror, loginfo, logwarn } from '../utils/Logger';
+import { MessageContainer } from '../APIGatewayShared';
+import type { InjectionToken } from '../utils/DIContainer';
 
 export interface AMQPAdapterOptions {
   connectionURL: string;
@@ -13,7 +16,7 @@ export class AMQPAdapter {
 
   private _retries: number = 5;
 
-  private _delay: number = 10;
+  private _delay: number = 10 * 1000;
 
   private _connection!: Connection;
 
@@ -24,9 +27,11 @@ export class AMQPAdapter {
   private async _waitAMQPConnection(): Promise<Connection> {
     for (let retriesLeft = this._retries; retriesLeft > 0; retriesLeft -= 1) {
       try {
-        return await amqp.connect(this._connectionURL);
+        const connection = await amqp.connect(this._connectionURL);
+        loginfo('AMQPAdapter::_waitAMQPConnection', 'Connected!');
+        return connection;
       } catch (error) {
-        console.log(`Retries left: ${retriesLeft}`);
+        logwarn('AMQPAdapter::_waitAMQPConnection', `Retries left: ${retriesLeft}`);
         await sleep(this._delay);
       }
     }
@@ -52,7 +57,7 @@ export class AMQPAdapter {
     this._isReady = true;
   }
 
-  public async sendMessage(queueName: string, message: any) {
+  public async sendMessage(queueName: string, message: MessageContainer) {
     if (!this._isReady) throw new Error('Adapter is not ready!');
 
     await this._channel.assertQueue(queueName, { durable: false });
@@ -60,16 +65,55 @@ export class AMQPAdapter {
     return this._channel.sendToQueue(queueName, Buffer.from(JSON.stringify(message)));
   }
 
+  public async deleteQueue(queueName: string) {
+    await this._channel.deleteQueue(queueName);
+  }
+
   public async consume(
     queueName: string,
-    onMessage: (msg: amqp.ConsumeMessage | null) => void,
+    onMessage: (messageContainer: MessageContainer) => void,
     options?: amqp.Options.Consume,
   ) {
     if (!this._isReady) throw new Error('Adapter is not ready!');
 
     await this._channel.assertQueue(queueName, { durable: false });
 
-    return this._channel.consume(queueName, onMessage, options);
+    let consumerTag: string | null = null;
+
+    const messageNormalizer = (msg: amqp.ConsumeMessage | null): void => {
+      if (msg == null) {
+        logwarn('AMQPAdapter::messageNormalizer', 'message is null');
+        if (consumerTag != null) {
+          this._channel.cancel(consumerTag)
+            .then(() => {
+              loginfo('AMQPAdapter::messageNormalizer', 'Consumer canceled');
+            }).catch((error) => {
+              logerror('AMQPAdapter::messageNormalizer', error);
+            });
+        } else logerror('AMQPAdapter::messageNormalizer', 'consumerTag is null');
+        return;
+      }
+      const messageContainer: MessageContainer = JSON.parse(msg.content.toString());
+      // const messageMeta = {
+      //   fields: msg.fields,
+      //   properties: msg.properties,
+      // };
+
+      onMessage(messageContainer);
+    };
+
+    consumerTag = (await this._channel.consume(queueName, messageNormalizer, options)).consumerTag;
+
+    return consumerTag;
+  }
+
+  public async subscribe(
+    queueName: string,
+    onMessage: (messageContainer: MessageContainer) => void,
+    options?: amqp.Options.Consume,
+  ) {
+    const consumerTag = await this.consume(queueName, onMessage, options);
+    return async () => { await this._channel.cancel(consumerTag); };
   }
 
   async destructor() {
@@ -78,3 +122,10 @@ export class AMQPAdapter {
     await this._connection.close();
   }
 }
+
+export const amqpAdapterInjectionToken: InjectionToken<AMQPAdapter> = {
+  id: Symbol('AMQPAdapter'),
+  guard(value: unknown): value is AMQPAdapter {
+    return value instanceof AMQPAdapter;
+  },
+};
